@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<mod name="Rotating Cameras">
+	<tweak definition="tweaks/network_settings.xml"/>
+</mod>
