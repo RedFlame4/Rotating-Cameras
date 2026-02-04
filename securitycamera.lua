@@ -7,6 +7,12 @@ local idstr_camera_lens = Idstring("CameraLens")
 local idstr_camera_yaw = Idstring("CameraYaw")
 local idstr_camera_pitch = Idstring("CameraPitch")
 
+local function angular_difference(start_yaw, end_yaw, start_pitch, end_pitch)
+	local yaw_diff = end_yaw - start_yaw
+	local pitch_diff = end_pitch - start_pitch
+	return math.sqrt(yaw_diff * yaw_diff + pitch_diff * pitch_diff)
+end
+
 SecurityCamera._stall_time = {1.5, 2.5}
 
 Hooks:PostHook(SecurityCamera, "init", "camerarot_init", function(self)
@@ -84,15 +90,12 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 		return
 	end
 
-	local yaw_diff = target_yaw - self._yaw
-	local pitch_diff = target_pitch - self._pitch
-
-	local angle_diff = math.sqrt(yaw_diff * yaw_diff + pitch_diff * pitch_diff)
+	local angle_diff = angular_difference(self._yaw, target_yaw, self._pitch, target_pitch)
 	if angle_diff > 0 then
 		mrotation.set_yaw_pitch_roll(tmp_rot, self._yaw, self._pitch, 0)
 		mrotation.set_yaw_pitch_roll(tmp_rot2, target_yaw, target_pitch, 0)
 
-		local rate = self._turn_duration and (angle_diff / self._turn_duration) or self._turn_rate
+		local rate = self._initial_angle_diff and (self._initial_angle_diff / self._turn_duration) or self._turn_rate
 		local lerp_t = math.min(1, (rate * dt) / angle_diff)
 
 		mrotation.slerp(tmp_rot, tmp_rot, tmp_rot2, lerp_t)
@@ -138,8 +141,8 @@ end
 
 function SecurityCamera:set_target_yaw(yaw, duration)
 	self._target_yaw = yaw
-	self._yaw_difference = math.abs(self._target_yaw - self._yaw) -- math.step always expects a positive number
-	self._turn_duration = duration or self._yaw_difference / self._turn_rate
+	self._initial_angle_diff = angular_difference(self._yaw, yaw, self._pitch, self._original_pitch)
+	self._turn_duration = duration or self._initial_angle_diff / self._turn_rate
 
 	if Network:is_server() then
 		local sync_yaw = math.round(255 * ((self._target_yaw + 180) / 360))
@@ -269,8 +272,8 @@ Hooks:OverrideFunction(SecurityCamera, "set_update_enabled", SecurityCamera.chk_
 
 function SecurityCamera:stop_current_rotation(finished)
 	self._target_yaw = nil
-	self._yaw_difference = nil
 	self._turn_duration = nil
+	self._initial_angle_diff = nil
 
 	if Network:is_server() then
 		self._stalled_until = finished and TimerManager:game():time() + math.rand(self._stall_time[1], self._stall_time[2]) or nil
