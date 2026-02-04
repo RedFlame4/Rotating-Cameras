@@ -70,7 +70,7 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 
 			self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch(), true)
 		elseif attention.pos then
-			self:stop_current_rotation(true)
+			self:set_target_attention(nil)
 
 			if Network:is_client() then
 				self:chk_update_state()
@@ -458,8 +458,8 @@ Hooks:OverrideFunction(SecurityCamera, "_upd_detect_attention_objects", function
 end)
 
 Hooks:PreHook(SecurityCamera, "generate_cooldown", "camerarot_generate_cooldown", function(self)
-	self:stop_current_rotation()
 	self:set_target_attention(nil)
+	self:stop_current_rotation()
 end)
 
 Hooks:PostHook(SecurityCamera, "destroy", "camerarot_destroy", function(self)
