@@ -9,5 +9,13 @@
             <param type="int" min="0" max="255"/>   <!-- end_yaw -->
             <param type="float" min="0" max="255" step="0.1" exact="false"/>    <!-- duration -->
         </message>
+        <message name="camera_set_attention" delivery="ordered" receiver="unit" check="server_to_client">
+            <param type="unit" />	<!-- observer unit -->
+            <param type="unit" />	<!-- target unit -->
+        </message>
+        <message name="cop_set_attention_pos" delivery="ordered" receiver="unit" check="server_to_client">
+            <param type="unit" />	<!-- cop unit -->
+            <param type="vector3" />	<!-- target pos -->
+        </message>
     </target>
 </tweak>
