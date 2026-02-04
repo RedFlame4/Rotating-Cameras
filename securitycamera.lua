@@ -91,17 +91,21 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 	end
 
 	local angle_diff = angular_difference(self._yaw, target_yaw, self._pitch, target_pitch)
-	if angle_diff > 0 then
-		mrotation.set_yaw_pitch_roll(tmp_rot, self._yaw, self._pitch, 0)
-		mrotation.set_yaw_pitch_roll(tmp_rot2, target_yaw, target_pitch, 0)
+	local rate = self._initial_angle_diff and (self._initial_angle_diff / self._turn_duration) or self._turn_rate
+	local lerp_t = math.min((rate * dt) / angle_diff, 1)
 
-		local rate = self._initial_angle_diff and (self._initial_angle_diff / self._turn_duration) or self._turn_rate
-		local lerp_t = math.min(1, (rate * dt) / angle_diff)
+	mrotation.set_yaw_pitch_roll(tmp_rot, self._yaw, self._pitch, 0)
+	mrotation.set_yaw_pitch_roll(tmp_rot2, target_yaw, target_pitch, 0)
 
-		mrotation.slerp(tmp_rot, tmp_rot, tmp_rot2, lerp_t)
+	mrotation.slerp(tmp_rot, tmp_rot, tmp_rot2, lerp_t)
 
-		self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch(), true)
-	elseif attention and attention.pos then
+	self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch(), true)
+
+	if lerp_t < 1 then
+		return
+	end
+
+	if attention and attention.pos then
 		self:set_target_attention(nil)
 
 		if Network:is_client() then
