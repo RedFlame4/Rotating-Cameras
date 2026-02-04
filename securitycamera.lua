@@ -67,7 +67,7 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 			self._stalled_until = nil
 
 			local new_target_yaw = self._max_yaw * self._turn_direction
-			if self._yaw == new_target_yaw then
+			if math.abs(self._yaw - new_target_yaw) < 5 then
 				self._turn_direction = -self._turn_direction
 				new_target_yaw = -new_target_yaw
 			end
