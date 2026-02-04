@@ -1,5 +1,7 @@
 local tmp_vec = Vector3()
+
 local tmp_rot = Rotation()
+local tmp_rot2 = Rotation()
 
 local idstr_camera_lens = Idstring("CameraLens")
 local idstr_camera_yaw = Idstring("CameraYaw")
@@ -18,7 +20,7 @@ Hooks:PostHook(SecurityCamera, "init", "camerarot_init", function(self)
 	self._yaw_obj = self._unit:get_object(idstr_camera_yaw)
 	self._pitch_obj = self._unit:get_object(idstr_camera_pitch)
 
-	self._turn_rate = 15 -- degrees/s
+	self._turn_rate = 24 -- degrees/s
 end)
 
 Hooks:PostHook(SecurityCamera, "set_detection_enabled", "camerarot_set_detection_enabled", function(self, state)
@@ -54,29 +56,7 @@ Hooks:OverrideFunction(SecurityCamera, "update", function (self, unit, t, dt, ..
 end)
 
 function SecurityCamera:_update_camera_rotation(unit, t, dt)
-	local attention = self._target_attention
-	local target_pos = attention and (attention.handler and attention.handler:get_detection_m_pos() or attention.pos)
-	if target_pos then
-		local target_yaw, target_pitch = self:_get_local_yaw_pitch_to_position(target_pos)
-
-		local current_rot = self._look_obj:local_rotation()
-		mrotation.set_yaw_pitch_roll(tmp_rot, target_yaw, target_pitch, current_rot:roll())
-
-		local angle_diff = current_rot:angle(tmp_rot)
-		if angle_diff > 0 then
-			local t = math.min(1, (self._turn_rate * dt) / angle_diff)
-
-			mrotation.slerp(tmp_rot, current_rot, tmp_rot, t)
-
-			self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch(), true)
-		elseif attention.pos then
-			self:set_target_attention(nil)
-
-			if Network:is_client() then
-				self:chk_update_state()
-			end
-		end
-	elseif self._stalled_until then
+	if self._stalled_until then
 		if t > self._stalled_until then
 			self._stalled_until = nil
 
@@ -88,16 +68,43 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 
 			self:set_target_yaw(new_target_yaw)
 		end
+		return
+	end
+
+	local attention = self._target_attention
+	local target_pos = attention and (attention.handler and attention.handler:get_detection_m_pos() or attention.pos)
+
+	local target_yaw, target_pitch
+	if target_pos then
+		target_yaw, target_pitch = self:_get_local_yaw_pitch_to_position(target_pos)
 	elseif self._target_yaw then
-		local new_yaw = math.step(self._yaw, self._target_yaw, self._yaw_difference * (dt / self._turn_duration))
-		local new_pitch = self._pitch ~= self._original_pitch and math.step(self._pitch, self._original_pitch, self._turn_rate * dt) or nil
+		target_yaw = self._target_yaw
+		target_pitch = self._original_pitch
+	else
+		return
+	end
 
-		self:apply_rotations(new_yaw, new_pitch, true)
+	local yaw_diff = target_yaw - self._yaw
+	local pitch_diff = target_pitch - self._pitch
 
-		if new_yaw ~= self._target_yaw then
-			return
+	local angle_diff = math.sqrt(yaw_diff * yaw_diff + pitch_diff * pitch_diff)
+	if angle_diff > 0 then
+		mrotation.set_yaw_pitch_roll(tmp_rot, self._yaw, self._pitch, 0)
+		mrotation.set_yaw_pitch_roll(tmp_rot2, target_yaw, target_pitch, 0)
+
+		local rate = self._turn_duration and (angle_diff / self._turn_duration) or self._turn_rate
+		local lerp_t = math.min(1, (rate * dt) / angle_diff)
+
+		mrotation.slerp(tmp_rot, tmp_rot, tmp_rot2, lerp_t)
+
+		self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch(), true)
+	elseif attention and attention.pos then
+		self:set_target_attention(nil)
+
+		if Network:is_client() then
+			self:chk_update_state()
 		end
-
+	elseif self._target_yaw then
 		self:stop_current_rotation(true)
 
 		if Network:is_server() then
@@ -109,13 +116,19 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 end
 
 function SecurityCamera:_get_local_yaw_pitch_to_position(target_pos)
+	self._unit:m_rotation(tmp_rot)
 	self._look_obj:m_position(tmp_vec)
 
 	mvector3.direction(tmp_vec, tmp_vec, target_pos)
-	mrotation.set_look_at(tmp_rot, tmp_vec, math.UP)
+    mvector3.rotate_with(tmp_vec, tmp_rot:inverse()) -- => local space
+	mrotation.set_look_at(tmp_rot2, tmp_vec, math.UP)
 
-	local target_yaw = tmp_rot:yaw() - 180
-	local target_pitch = -tmp_rot:pitch()
+    local target_yaw = tmp_rot2:yaw() - 180
+    if target_yaw < -180 then
+        target_yaw = target_yaw + 360
+    end
+
+	local target_pitch = tmp_rot2:pitch()
 
 	target_yaw = math.clamp(target_yaw, -self._max_yaw, self._max_yaw)
 	target_pitch = math.clamp(target_pitch, -self._max_pitch, self._max_pitch)
@@ -470,10 +483,6 @@ end)
 Hooks:PostHook(SecurityCamera, "save", "camerarot_save", function(self, data)
 	if self._target_yaw then
 		data.target_yaw = self._target_yaw
-
-		local rel_progress_left = math.abs((self._target_yaw - self._yaw) / self._yaw_difference)
-
-		data.turn_duration = self._turn_duration * rel_progress_left
 	end
 
 	if self._target_attention then
@@ -492,7 +501,7 @@ end)
 
 Hooks:PostHook(SecurityCamera, "load", "camerarot_load", function(self, data)
 	if data.target_yaw then
-		self:set_target_yaw(data.target_yaw, data.turn_duration)
+		self:set_target_yaw(data.target_yaw)
 	end
 
 	if data.attention_pos then
