@@ -19,6 +19,9 @@ Hooks:PostHook(SecurityCamera, "init", "camerarot_init", function(self)
 	self._yaw = 0
 	self._pitch = 0
 
+	self._original_yaw = 0
+	self._original_pitch = 0
+
 	self._max_yaw = 60
 	self._max_pitch = 30
 
@@ -127,13 +130,13 @@ function SecurityCamera:_get_local_yaw_pitch_to_position(target_pos)
 	self._look_obj:m_position(tmp_vec)
 
 	mvector3.direction(tmp_vec, tmp_vec, target_pos)
-    mvector3.rotate_with(tmp_vec, tmp_rot:inverse()) -- => local space
+	mvector3.rotate_with(tmp_vec, tmp_rot:inverse()) -- => local space
 	mrotation.set_look_at(tmp_rot2, tmp_vec, math.UP)
 
-    local target_yaw = tmp_rot2:yaw() - 180
-    if target_yaw < -180 then
-        target_yaw = target_yaw + 360
-    end
+	local target_yaw = tmp_rot2:yaw() - 180
+	if target_yaw < -180 then
+		target_yaw = target_yaw + 360
+	end
 
 	local target_pitch = tmp_rot2:pitch()
 
@@ -329,7 +332,6 @@ end)
 -- full function override is unfortunately necessary
 Hooks:OverrideFunction(SecurityCamera, "_upd_detect_attention_objects", function(self, t)
 	local detected_obj = self._detected_attention_objects
-	local my_key = self._u_key
 	local my_pos = self._pos
 	local my_fwd = self._look_fwd
 	local det_delay = self._detection_delay
