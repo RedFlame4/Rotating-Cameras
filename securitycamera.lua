@@ -159,7 +159,7 @@ function SecurityCamera:set_target_yaw(yaw, duration)
 	if Network:is_server() then
 		local sync_yaw = math.round(255 * ((self._target_yaw + 180) / 360))
 
-		managers.network:session():send_to_peers_synched("sync_camera_rotation", self._unit, sync_yaw, angle_diff / self._turn_rate)
+		managers.network:session():send_to_peers_synched("sync_camera_rotation", self._unit, sync_yaw, duration or angle_diff / self._turn_rate)
 	else
 		self:chk_update_state()
 	end
