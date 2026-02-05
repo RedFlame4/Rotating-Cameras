@@ -189,10 +189,8 @@ function SecurityCamera:set_target_attention(attention)
 			else
 				managers.network:session():send_to_peers_synched("camera_set_attention_pos", self._unit, attention.pos)
 			end
-		else
-			if old_attention and self._unit:id() ~= -1 then
-				managers.network:session():send_to_peers_synched("camera_set_attention", self._unit, nil)
-			end
+		elseif old_attention and self._unit:id() ~= -1 then
+			managers.network:session():send_to_peers_synched("camera_set_attention", self._unit, nil)
 		end
 	else
 		if attention and attention.handler then
