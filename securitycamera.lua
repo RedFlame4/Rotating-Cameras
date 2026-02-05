@@ -523,11 +523,8 @@ Hooks:PostHook(SecurityCamera, "load", "camerarot_load", function(self, data)
 		self:set_target_attention({ pos = data.attention_pos })
 	end
 
-	if data.original_yaw then
+	if data.original_yaw and data.original_pitch then
 		self._original_yaw = data.original_yaw
-	end
-
-	if data.original_pitch then
 		self._original_pitch = data.original_pitch
 	end
 end)
