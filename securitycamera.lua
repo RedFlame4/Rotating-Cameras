@@ -494,6 +494,9 @@ Hooks:PostHook(SecurityCamera, "destroy", "camerarot_destroy", function(self)
 end)
 
 Hooks:PostHook(SecurityCamera, "save", "camerarot_save", function(self, data)
+	data.original_yaw = self._original_yaw
+	data.original_pitch = self._original_pitch
+
 	if self._target_yaw then
 		data.target_yaw = self._target_yaw
 	end
@@ -507,22 +510,19 @@ Hooks:PostHook(SecurityCamera, "save", "camerarot_save", function(self, data)
 			data.attention_pos = self._target_attention.handler:get_detection_m_pos()
 		end
 	end
-
-	data.original_yaw = self._original_yaw
-	data.original_pitch = self._original_pitch
 end)
 
 Hooks:PostHook(SecurityCamera, "load", "camerarot_load", function(self, data)
+	if data.original_yaw and data.original_pitch then
+		self._original_yaw = data.original_yaw
+		self._original_pitch = data.original_pitch
+	end
+
 	if data.target_yaw then
 		self:set_target_yaw(data.target_yaw)
 	end
 
 	if data.attention_pos then
 		self:set_target_attention({ pos = data.attention_pos })
-	end
-
-	if data.original_yaw and data.original_pitch then
-		self._original_yaw = data.original_yaw
-		self._original_pitch = data.original_pitch
 	end
 end)
