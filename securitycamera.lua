@@ -23,14 +23,14 @@ Hooks:PostHook(SecurityCamera, "init", "camerarot_init", function(self)
 	self._yaw_obj = self._unit:get_object(idstr_camera_yaw)
 	self._pitch_obj = self._unit:get_object(idstr_camera_pitch)
 
-	if self._yaw_obj and self._pitch_obj then
+	self._controlling_peers = {}
+
+	if self:can_rotate() then
 		self._yaw = 0
 		self._pitch = 0
 
 		self._original_yaw = 0
 		self._original_pitch = 0
-
-		self._controlling_peers = {}
 
 		self._turn_direction = math.random(2) == 1 and 1 or -1
 		self:chk_begin_rotation()
@@ -153,17 +153,11 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 
 	if attention and attention.pos then
 		self:set_target_attention(nil)
-
-		if not self:should_rotate_locally() then
-			self:chk_update_state()
-		end
 	elseif self._target_yaw and not self._rotation_forced then
 		self:stop_current_rotation(true)
 
 		if self:should_rotate_locally() then
 			self._turn_direction = -self._turn_direction
-		else
-			self:chk_update_state()
 		end
 	end
 end
@@ -192,15 +186,11 @@ function SecurityCamera:_get_local_yaw_pitch_to_position(target_pos)
 end
 
 function SecurityCamera:chk_begin_rotation()
-	if not self._yaw_obj or not self._pitch_obj then
+	if not self:can_rotate() or not self:should_rotate_locally() then
 		return
 	end
 
-	if not self:should_rotate_locally() then
-		return
-	end
-
-	if self._target_yaw or self._stalled_until then
+	if self:is_rotating() then
 		return
 	end
 
@@ -211,7 +201,6 @@ function SecurityCamera:chk_begin_rotation()
 	end
 
 	self:set_target_rotation(new_target_yaw)
-	self:chk_update_state()
 end
 
 function SecurityCamera:set_target_rotation(yaw, pitch, forced, duration)
@@ -223,20 +212,16 @@ function SecurityCamera:set_target_rotation(yaw, pitch, forced, duration)
 	self._target_pitch = pitch
 	self._rotation_forced = forced
 
-	local yaw_diff = self._yaw - yaw
-	local pitch_diff = self._pitch - pitch
-	local angle_diff = math.pythagoras(yaw_diff, pitch_diff)
+	local angle_diff = math.pythagoras(self._yaw - yaw, self._pitch - pitch)
 	if duration then
 		self._turn_rate = math.min(self._max_turn_rate, angle_diff / duration)
-	else
-		duration = angle_diff / self._turn_rate
 	end
 
-	if Network:is_server() then
-		self:sync_target_rotation(yaw, pitch, forced, duration)
-	else
-		self:chk_update_state()
+	if Network:is_server() and self:has_control() then
+		self:sync_target_rotation(yaw, pitch, forced, duration or angle_diff / self._turn_rate)
 	end
+
+	self:chk_update_state()
 end
 
 function SecurityCamera:sync_target_rotation(yaw, pitch, forced, duration)
@@ -251,6 +236,10 @@ function SecurityCamera:sync_target_rotation(yaw, pitch, forced, duration)
 end
 
 function SecurityCamera:set_target_attention(attention)
+	if not self:can_rotate() then
+		return
+	end
+
 	local old_attention = self._target_attention
 	if not attention and not old_attention then
 		return
@@ -277,15 +266,13 @@ function SecurityCamera:set_target_attention(attention)
 		elseif old_attention and self._unit:id() ~= -1 then
 			managers.network:session():send_to_peers_synched("camera_set_attention", self._unit, nil)
 		end
-	else
-		if attention and attention.handler then
-			self:_add_attention_destroy_listener(attention)
-		end
-
-		self:chk_update_state()
+	elseif attention and attention.handler then
+		self:_add_attention_destroy_listener(attention)
 	end
 
 	self._target_attention = attention
+
+	self:chk_update_state()
 end
 
 function SecurityCamera:_add_attention_destroy_listener(attention)
@@ -354,10 +341,8 @@ function SecurityCamera:chk_update_state(state, ...)
 	end
 
 	local needs_update = state
-		or self._detection_enabled
-		or self._target_yaw
-		or self._target_attention
-		or self._stalled_until
+		or Network:is_server() and self._detection_enabled
+		or self:is_rotating()
 		or self._tape_loop_restarting_t
 
 	return set_update_enabled_orig(self, needs_update, ...)
@@ -374,6 +359,8 @@ function SecurityCamera:stop_current_rotation(finished)
 	if self:should_rotate_locally() then
 		self._stalled_until = finished and TimerManager:game():time() + math.rand(self._stall_time[1], self._stall_time[2]) or nil
 	end
+
+	self:chk_update_state()
 end
 
 function SecurityCamera:player_control_state(peer_id, state)
@@ -399,8 +386,8 @@ function SecurityCamera:player_control_state(peer_id, state)
 end
 
 function SecurityCamera:sync_control_state(state, peer_id)
-	if self._destroyed or self._unit:id() == -1 then
-		return
+	if not self:can_rotate() or self._unit:id() == -1 then
+		return -- can't rotate anyway, access is presumed since nobody can claim it
 	end
 
 	peer_id = peer_id or managers.network:session():local_peer():id()
@@ -417,6 +404,15 @@ function SecurityCamera:controlling_peer()
 	return self._controlling_peers[1]
 end
 
+function SecurityCamera:clear_controlling_peers()
+	local peers = self._controlling_peers                                                                                                                                                                   
+	self._controlling_peers = {}
+
+	for _, peer_id in ipairs(peers) do
+		managers.player:set_synced_controlled_camera(peer_id, nil)
+	end
+end
+
 function SecurityCamera:has_control()
 	-- presume control until host says otherwise
 	local controlling_peer = self:controlling_peer()
@@ -424,7 +420,15 @@ function SecurityCamera:has_control()
 end
 
 function SecurityCamera:should_rotate_locally()
-	return Network:is_server() or not self._detection_enabled
+	return Network:is_server() or not self._detection_enabled or self._unit:id() == -1
+end
+
+function SecurityCamera:can_rotate()
+	return not self._destroyed and self._yaw_obj and self._pitch_obj
+end
+
+function SecurityCamera:is_rotating()
+	return self._target_yaw or self._target_pitch or self._stalled_until or self._target_attention
 end
 
 Hooks:OverrideFunction(SecurityCamera, "apply_rotations", function (self, yaw, pitch)
@@ -609,10 +613,8 @@ Hooks:OverrideFunction(SecurityCamera, "_upd_detect_attention_objects", function
 	end
 end)
 
-Hooks:PreHook(SecurityCamera, "generate_cooldown", "camerarot_generate_cooldown", function(self)
-	self._controlling_peers = {}
-
-	self:set_target_attention(nil)
+Hooks:PostHook(SecurityCamera, "generate_cooldown", "camerarot_generate_cooldown", function(self)
+	self:clear_controlling_peers()
 	self:stop_current_rotation()
 end)
 
@@ -621,21 +623,23 @@ Hooks:PostHook(SecurityCamera, "destroy", "camerarot_destroy", function(self)
 	self:chk_update_state()
 end)
 
+function SecurityCamera:on_post_detached_from_network()
+	self:clear_controlling_peers()
+	self:set_detection_enabled(false)
+	self:chk_begin_rotation()
+end
+
 Hooks:PostHook(SecurityCamera, "save", "camerarot_save", function(self, data)
 	data.original_yaw = self._original_yaw
 	data.original_pitch = self._original_pitch
 	data.detection_enabled = self._detection_enabled
 	data.controlling_peers = next(self._controlling_peers) and self._controlling_peers or nil
 
-	if self._target_yaw then
+	if self._target_yaw and self._target_pitch then
 		data.target_yaw = self._target_yaw
 		data.target_pitch = self._target_pitch
 		data.rotation_forced = self._rotation_forced
-
-		local yaw_diff = self._yaw - (self._target_yaw or self._original_yaw)
-		local pitch_diff = self._pitch - (self._target_pitch or self._original_pitch)
-
-		data.turn_duration = math.pythagoras(yaw_diff, pitch_diff) / self._turn_rate
+		data.turn_duration = math.pythagoras(self._yaw - self._target_yaw, self._pitch - self._target_pitch) / self._turn_rate
 	end
 
 	if self._target_attention then

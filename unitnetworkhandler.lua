@@ -8,6 +8,10 @@ function UnitNetworkHandler:camera_rotation(cam_unit, end_yaw, end_pitch, forced
 		return
 	end
 
+	if not cam_unit:base():can_rotate() then
+		return
+	end
+
 	local target_yaw = (360 * (end_yaw / 255)) - 180
 	local target_pitch = (180 * (end_pitch / 255)) - 90
 
@@ -64,6 +68,10 @@ function UnitNetworkHandler:camera_control_state(cam_unit, peer_id, state)
 
 	local peer = managers.network:session():peer(peer_id)
 	if not alive(cam_unit) or not peer then
+		return
+	end
+
+	if cam_unit:base():destroyed() then
 		return
 	end
 
