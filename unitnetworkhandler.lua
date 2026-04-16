@@ -1,11 +1,17 @@
-function UnitNetworkHandler:sync_camera_rotation(cam_unit, end_yaw, duration)
+function UnitNetworkHandler:camera_rotation(cam_unit, end_yaw, end_pitch, forced, duration, rpc)
 	if not alive(cam_unit) or not self._verify_gamestate(self._gamestate_filter.any_ingame) then
 		return
 	end
 
-	local target_yaw = (360 * (end_yaw / 255)) - 180
+	local peer = self._verify_sender(rpc)
+	if not peer:is_host() and cam_unit:base():controlling_peer() ~= peer:id() then
+		return
+	end
 
-	cam_unit:base():set_target_yaw(target_yaw, duration)
+	local target_yaw = (360 * (end_yaw / 255)) - 180
+	local target_pitch = (180 * (end_pitch / 255)) - 90
+
+	cam_unit:base():set_target_rotation(target_yaw, target_pitch, forced == 1, duration)
 end
 
 function UnitNetworkHandler:camera_set_attention(cam_unit, target_unit)
@@ -36,4 +42,30 @@ function UnitNetworkHandler:camera_set_attention_pos(cam_unit, pos)
 	end
 
 	cam_unit:base():set_target_attention({ pos = pos })
+end
+
+function UnitNetworkHandler:camera_want_control(cam_unit, state, rpc)
+	if not self._verify_gamestate(self._gamestate_filter.any_ingame) then
+		return
+	end
+
+	local peer = self._verify_sender(rpc)
+	if not alive(cam_unit) or not peer then
+		return
+	end
+
+	cam_unit:base():sync_control_state(state, peer:id())
+end
+
+function UnitNetworkHandler:camera_control_state(cam_unit, peer_id, state)
+	if not self._verify_gamestate(self._gamestate_filter.any_ingame) then
+		return
+	end
+
+	local peer = managers.network:session():peer(peer_id)
+	if not alive(cam_unit) or not peer then
+		return
+	end
+
+	managers.player:set_synced_controlled_camera(peer_id, state and cam_unit or nil)
 end
