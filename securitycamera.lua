@@ -431,6 +431,10 @@ function SecurityCamera:is_rotating()
 	return self._target_yaw or self._target_pitch or self._stalled_until or self._target_attention
 end
 
+function SecurityCamera:current_rotation()
+	return self._yaw, self._pitch
+end
+
 Hooks:OverrideFunction(SecurityCamera, "apply_rotations", function (self, yaw, pitch)
 	if yaw and self._yaw ~= yaw then
 		local yaw_obj = self._yaw_obj or self._unit:get_object(idstr_camera_yaw)
