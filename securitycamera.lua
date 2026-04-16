@@ -223,8 +223,8 @@ function SecurityCamera:set_target_rotation(yaw, pitch, forced, duration)
 	self._target_pitch = pitch
 	self._rotation_forced = forced
 
-	local yaw_diff = self._yaw - (yaw or self._original_yaw)
-	local pitch_diff = self._pitch - (pitch or self._original_pitch)
+	local yaw_diff = self._yaw - yaw
+	local pitch_diff = self._pitch - pitch
 	local angle_diff = math.pythagoras(yaw_diff, pitch_diff)
 	if duration then
 		self._turn_rate = math.min(self._max_turn_rate, angle_diff / duration)
@@ -656,9 +656,7 @@ Hooks:PostHook(SecurityCamera, "load", "camerarot_load", function(self, data)
 
 	if data.controlling_peers then
 		-- loading from here instead of playermanager to preserve ordering
-		self._controlling_peers = data.controlling_peers
-
-		for _, peer_id in ipairs(self._controlling_peers) do
+		for _, peer_id in ipairs(data.controlling_peers) do
 			managers.player:set_synced_controlled_camera(peer_id, self._unit)
 		end
 	end
