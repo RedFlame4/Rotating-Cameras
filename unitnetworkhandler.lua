@@ -15,7 +15,7 @@ function UnitNetworkHandler:camera_rotation(cam_unit, end_yaw, end_pitch, forced
 	local target_yaw = (360 * (end_yaw / 255)) - 180
 	local target_pitch = (180 * (end_pitch / 255)) - 90
 
-	cam_unit:base():set_target_rotation(target_yaw, target_pitch, forced == 1, duration)
+	cam_unit:base():set_target_rotation(target_yaw, target_pitch, forced, duration)
 end
 
 function UnitNetworkHandler:camera_set_attention(cam_unit, target_unit)

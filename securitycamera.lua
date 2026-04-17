@@ -14,6 +14,7 @@ SecurityCamera._max_turn_rate = 24 -- degrees/s
 SecurityCamera._turn_rate = SecurityCamera._max_turn_rate
 
 Hooks:PostHook(SecurityCamera, "set_access_camera_mission_element", "camerarot_set_access_camera_mission_element", function(self, element)
+	-- TODO: these values are bad, just figure out limits for the camera and make accesscamera use them
 	self._max_yaw = element and element:value("yaw_limit") or nil
 	self._max_pitch = element and element:value("pitch_limit") or nil
 end)
@@ -50,7 +51,7 @@ function SecurityCamera:set_detection_enabled(state, settings, mission_element)
 	end
 
 	if Network:is_client() then
-		return
+		return self:chk_begin_rotation() -- could be our responsibility to rotate it now
 	end
 
 	self._mission_script_element = mission_element or self._mission_script_element
@@ -190,7 +191,7 @@ function SecurityCamera:chk_begin_rotation()
 		return
 	end
 
-	if self:is_rotating() then
+	if self:is_rotating() or self._stalled_until then
 		return
 	end
 
@@ -225,14 +226,14 @@ function SecurityCamera:set_target_rotation(yaw, pitch, forced, duration)
 end
 
 function SecurityCamera:sync_target_rotation(yaw, pitch, forced, duration)
-	if not self._detection_enabled then
+	if not forced and not self._detection_enabled or self._unit:id() == -1 then
 		return -- rotation control has been handed off to clients
 	end
 
 	local sync_yaw = math.round(255 * ((yaw + 180) / 360))
 	local sync_pitch = math.round(255 * ((pitch + 90) / 180))
 
-	managers.network:session():send_to_peers_synched("camera_rotation", self._unit, sync_yaw, sync_pitch, forced and 1 or 0, duration)
+	managers.network:session():send_to_peers_synched("camera_rotation", self._unit, sync_yaw, sync_pitch, forced, duration)
 end
 
 function SecurityCamera:set_target_attention(attention)
@@ -343,6 +344,7 @@ function SecurityCamera:chk_update_state(state, ...)
 	local needs_update = state
 		or Network:is_server() and self._detection_enabled
 		or self:is_rotating()
+		or self:should_rotate_locally() and self._stalled_until
 		or self._tape_loop_restarting_t
 
 	return set_update_enabled_orig(self, needs_update, ...)
@@ -351,14 +353,11 @@ end
 Hooks:OverrideFunction(SecurityCamera, "set_update_enabled", SecurityCamera.chk_update_state)
 
 function SecurityCamera:stop_current_rotation(finished)
+	self._stalled_until = finished and TimerManager:game():time() + math.rand(self._stall_time[1], self._stall_time[2]) or nil
 	self._target_yaw = nil
 	self._target_pitch = nil
 	self._rotation_forced = nil
 	self._turn_rate = nil
-
-	if self:should_rotate_locally() then
-		self._stalled_until = finished and TimerManager:game():time() + math.rand(self._stall_time[1], self._stall_time[2]) or nil
-	end
 
 	self:chk_update_state()
 end
@@ -405,7 +404,7 @@ function SecurityCamera:controlling_peer()
 end
 
 function SecurityCamera:clear_controlling_peers()
-	local peers = self._controlling_peers                                                                                                                                                                   
+	local peers = self._controlling_peers
 	self._controlling_peers = {}
 
 	for _, peer_id in ipairs(peers) do
@@ -428,7 +427,7 @@ function SecurityCamera:can_rotate()
 end
 
 function SecurityCamera:is_rotating()
-	return self._target_yaw or self._target_pitch or self._stalled_until or self._target_attention
+	return self._target_yaw or self._target_pitch or self._target_attention
 end
 
 function SecurityCamera:current_rotation()

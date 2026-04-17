@@ -1,4 +1,5 @@
 local tmp_rot = Rotation()
+local tmp_vec1 = Vector3()
 
 Hooks:PreHook(IngameAccessCamera, "at_exit", "camerarot_at_exit", function(self)
 	local camera_unit = self:current_camera():camera_unit()
@@ -33,12 +34,11 @@ Hooks:OverrideFunction(IngameAccessCamera, "update", function(self, t, dt)
 
 		if m_rot then
 			access_camera:m_camera_rotation(m_rot)
+			roll = mrotation.roll(m_rot)
 		end
 
 		access_camera:m_camera_position(tmp_vec1)
 		self._cam_unit:set_position(tmp_vec1)
-
-		roll = mrotation.roll(m_rot)
 	end
 
 	local camera_unit = access_camera:camera_unit()
@@ -93,10 +93,8 @@ Hooks:OverrideFunction(IngameAccessCamera, "update", function(self, t, dt)
 			camera_base:apply_rotations(self._yaw, self._pitch)
 		end
 	else
-		self._yaw = camera_base._yaw
-		self._pitch = camera_base._pitch
-		self._target_yaw = self._yaw
-		self._target_pitch = self._pitch
+		self._yaw, self._pitch = camera_base:current_rotation()
+		self._target_yaw, self._target_pitch = self._yaw, self._pitch
 
 		self._cam_unit:camera():set_offset_rotation(self._yaw, self._pitch, roll)
 	end
