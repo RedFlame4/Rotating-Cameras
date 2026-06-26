@@ -250,8 +250,6 @@ function SecurityCamera:set_target_attention(attention)
 
 	CopMovement._remove_attention_destroy_listener(self, old_attention)
 
-	self:stop_current_rotation(not attention)
-
 	if Network:is_server() then
 		if attention then
 			if attention.handler then
@@ -271,6 +269,10 @@ function SecurityCamera:set_target_attention(attention)
 		end
 	elseif attention and attention.unit then
 		CopMovement._add_attention_destroy_listener(self, attention)
+	end
+
+	if not self._rotation_forced then
+		self:stop_current_rotation(not attention)
 	end
 
 	self._target_attention = attention
