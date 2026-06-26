@@ -140,19 +140,20 @@ function SecurityCamera:_update_camera_rotation(unit, t, dt)
 		return
 	end
 
-	local angle_diff = math.pythagoras(self._yaw - target_yaw, self._pitch - target_pitch)
-	local lerp_t = math.min((self._turn_rate * dt) / angle_diff, 1)
+	local yaw_diff = target_yaw - self._yaw
+	local pitch_diff = target_pitch - self._pitch
+	local angle_diff = math.pythagoras(yaw_diff, pitch_diff)
+	local step_rate = self._turn_rate * dt
+	if angle_diff > step_rate then
+		local new_yaw = math.step(self._yaw, target_yaw, step_rate * math.abs(yaw_diff) / angle_diff)
+		local new_pitch = math.step(self._pitch, target_pitch, step_rate * math.abs(pitch_diff) / angle_diff)
 
-	mrotation.set_yaw_pitch_roll(tmp_rot, self._yaw, self._pitch, 0)
-	mrotation.set_yaw_pitch_roll(tmp_rot2, target_yaw, target_pitch, 0)
+		self:apply_rotations(new_yaw, new_pitch)
 
-	mrotation.slerp(tmp_rot, tmp_rot, tmp_rot2, lerp_t)
-
-	self:apply_rotations(tmp_rot:yaw(), tmp_rot:pitch())
-
-	if lerp_t < 1 then
 		return
 	end
+
+	self:apply_rotations(target_yaw, target_pitch)
 
 	if attention and attention.pos then
 		self:set_target_attention(nil)
